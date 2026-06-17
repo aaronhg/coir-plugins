@@ -44,6 +44,16 @@ export function readSkel(skelBytes, atlasText) {
   };
 }
 
+// Read + parse the binary `.skel` at `assetPath` (via node fs) plus its paired
+// `.atlas`. Returns { m, atlasPath }; throws on read/parse failure. Shared by the
+// `skel` command and the asset-menu contribution so neither duplicates the IO.
+async function loadSkel(projectDir, scan, assetPath, readText) {
+  const bytes = new Uint8Array(await readFile(path.join(projectDir, 'assets', assetPath)));
+  const atlasPath = findAtlasPath(scan, assetPath);
+  const atlasText = atlasPath ? await readText(atlasPath) : '';
+  return { m: readSkel(bytes, atlasText), atlasPath };
+}
+
 // The .atlas paired with a .skel: a sibling in the same dir, preferring the same
 // basename, else the only/first .atlas there (Cocos pairs them by folder).
 function findAtlasPath(scan, skelPath) {
@@ -107,10 +117,7 @@ export default {
 
         let m, atlasPath;
         try {
-          const bytes = new Uint8Array(await readFile(path.join(ctx.projectDir, 'assets', asset.path)));
-          atlasPath = findAtlasPath(ctx.scan, asset.path);
-          const atlasText = atlasPath ? await ctx.readText(atlasPath) : '';
-          m = readSkel(bytes, atlasText);
+          ({ m, atlasPath } = await loadSkel(ctx.projectDir, ctx.scan, asset.path, ctx.readText));
         } catch (e) {
           return { error: `${asset.path}: failed to read .skel — ${e.message}` };
         }
@@ -118,6 +125,18 @@ export default {
           data: { asset: asset.path, uuid, atlas: atlasPath || null, ...m },
           text: renderSkel(asset.path, m, atlasPath),
         };
+      },
+    },
+  ],
+  // Editor right-click menu (e.g. the Cocos extension) — independent of the command.
+  // One row per animation: its name + duration.
+  assetMenus: [
+    {
+      ext: ['.skel'],
+      label: 'Coir skel',
+      async rows(ctx) {
+        const { m } = await loadSkel(ctx.projectDir, ctx.scan, ctx.asset.path, ctx.readText);
+        return m.animations.map((a) => ({ label: `${a.name} / ${r2(a.duration)}s` }));
       },
     },
   ],

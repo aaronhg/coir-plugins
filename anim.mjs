@@ -99,4 +99,19 @@ export default {
       },
     },
   ],
+  // Editor right-click menu (e.g. the Cocos extension) — independent of the command.
+  // A .anim is a single clip, so one row: its name + duration.
+  assetMenus: [
+    {
+      ext: ['.anim'],
+      types: ['anim'],
+      label: 'Coir anim',
+      async rows(ctx) {
+        const m = parseAnimClip(await ctx.readText(ctx.asset.path));
+        // A .anim is a single clip whose name == the file, so the row is just the
+        // duration; a host that collapses a single row shows "Coir anim  0.33s".
+        return m ? [{ label: `${r2(m.duration)}s` }] : [];
+      },
+    },
+  ],
 };

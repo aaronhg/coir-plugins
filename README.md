@@ -23,6 +23,8 @@ Each adds a `coir <cmd> <asset>` command (headless, engine-free); because it dec
 | [`anim.mjs`](anim.mjs) | `anim` | `coir anim <asset>` — reads a Cocos `.anim` (AnimationClip JSON, engine-free) and prints its metadata: name, effective duration (÷ speed), sample/frames, wrapMode, track/event counts. |
 | [`skel.mjs`](skel.mjs) | `skel` | `coir skel <asset>` — reads a Spine **binary `.skel` (3.8)** and prints skeleton info (version/hash/size, bone/slot/skin/event counts) plus the animation list (each name + duration). |
 
+Both also declare an `assetMenus` contribution (a plugin-level field, separate from `commands`), so when active in the [Cocos Creator extension](https://github.com/aaronhg/coir#嵌入--整合viewer--embedder--cocos-擴充) a right-click on a `.anim`/`.skel` shows a **`Coir anim`/`Coir skel`** submenu listing each animation as `name / duration`.
+
 ```bash
 coir anim walk.anim  -C /path/to/game --plugin /path/to/coir-plugins/anim.mjs            # text
 coir anim walk.anim  -C /path/to/game --plugin .../anim.mjs -o json                       # structured
