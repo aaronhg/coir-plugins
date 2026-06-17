@@ -1,40 +1,57 @@
 # coir-plugins
 
-[coir](https://github.com/aaronhg/coir) 的範例外掛集 —— 把「以字串名稱於執行期載入」的動態依賴灰區，補成可查的依賴邊。
+Example plugins for [coir](https://github.com/aaronhg/coir) — two kinds: **edge plugins** (turn the "loaded by string name at runtime" blind spot into queryable dependency edges) and **command plugins** (add a `coir <cmd>` that's also an MCP tool).
 
-每個檔案是**一個 plugin、`export default` 一個 plugin 物件**，零相依、零 build step（只用 `ctx`，型別走 `import('coir').Plugin`）。這些是**模板**：直接拿來用，或改頂端 `── configure ──` 區塊對到你專案的命名。
+Each file is **one plugin, `export default` a single plugin object** — zero deps, no build step (it only uses `ctx`; types come from `import('coir').Plugin`). The edge plugins are **templates**: use them as-is, or edit the `── configure ──` block at the top to match your project's naming.
 
-## 外掛一覽
+## Edge plugins
 
-| 檔案 | name | 做什麼 | 要設定的 |
+| File | name | What it does | Configure |
 |---|---|---|---|
-| [`audio-call.mjs`](audio-call.mjs) | `audio-call` | 掃 component 原始碼，把 `playAudio('bgm_title')` 之類的呼叫連到同名音檔（`.mp3`/`.ogg` 皆可）→ 邊 `腳本 → 音檔` | `FUNCS`：你專案的播放函式名 |
-| [`i18n-label.mjs`](i18n-label.mjs) | `i18n-label` | 把 prefab/scene 裡 i18n label 元件的 dot-path key（如 `MODULE.some_key`）連到定義該 key 的 `lang.json` → 邊 `prefab/scene → lang.json` | `COMPONENT`／`KEY_PROP`／`LANG_FILE`、`isLangFile()` |
-| [`resources-sprite.mjs`](resources-sprite.mjs) | `resources-sprite` | 把以 frame 名稱（序列化的 `keys: string[]`）於執行期取圖的元件，連到含該 frame 的 sprite-atlas → 邊 `prefab/scene → atlas`（再由內建 atlas 外掛接到底圖，補完 `scene → atlas → png`） | `COMPONENTS`／`KEYS_PROP` |
+| [`audio-call.mjs`](audio-call.mjs) | `audio-call` | Scans component source and links a `playAudio('bgm_title')`-style call to the audio asset of the same name (`.mp3`/`.ogg`) → edge `script → audio` | `FUNCS`: your play-audio function name(s) |
+| [`i18n-label.mjs`](i18n-label.mjs) | `i18n-label` | Links an i18n label component's dot-path key (e.g. `MODULE.some_key`) in a prefab/scene to the `lang.json` that defines it → edge `prefab/scene → lang.json` | `COMPONENT`/`KEY_PROP`/`LANG_FILE`, `isLangFile()` |
+| [`resources-sprite.mjs`](resources-sprite.mjs) | `resources-sprite` | Links a component that resolves sprites by frame name (a serialized `keys: string[]`) at runtime to the sprite-atlas(es) holding those frames → edge `prefab/scene → atlas` (coir's built-in atlas plugin then links atlas → texture, completing `scene → atlas → png`) | `COMPONENTS`/`KEYS_PROP` |
 
-> 三個外掛皆只看得到 **component 腳本**（純 util 模組在邊產生前已被剪枝）、只解**字串字面值**（變數／enum 無法靜態追蹤），撞名會連到全部同名目標 —— 屬刻意的設計取捨。
+> All three edge plugins see **component scripts only** (plain util modules are pruned before edges run) and resolve **string literals only** (variables/enums can't be followed statically); a colliding name links to every match — these are deliberate trade-offs.
 
-## 載入方式
+## Command plugins
 
-### 1. `--plugin <檔>`（該次查詢，可重複）
+Each adds a `coir <cmd> <asset>` command (headless, engine-free); because it declares an `inputSchema`, it's **also an MCP tool under `coir mcp`** (one `run` serves both). Nothing to configure.
+
+| File | name | What it does |
+|---|---|---|
+| [`anim.mjs`](anim.mjs) | `anim` | `coir anim <asset>` — reads a Cocos `.anim` (AnimationClip JSON, engine-free) and prints its metadata: name, effective duration (÷ speed), sample/frames, wrapMode, track/event counts. |
+| [`skel.mjs`](skel.mjs) | `skel` | `coir skel <asset>` — reads a Spine **binary `.skel` (3.8)** and prints skeleton info (version/hash/size, bone/slot/skin/event counts) plus the animation list (each name + duration). |
 
 ```bash
-coir -C <你的專案> --plugin ./audio-call.mjs --plugin ./i18n-label.mjs uses audio/bgm_title.mp3 --where
+coir anim walk.anim  -C /path/to/game --plugin /path/to/coir-plugins/anim.mjs            # text
+coir anim walk.anim  -C /path/to/game --plugin .../anim.mjs -o json                       # structured
+coir skel hero.skel  -C /path/to/game --plugin /path/to/coir-plugins/skel.mjs
 ```
 
-### 2. 放進 `coir.plugins.mjs`（自動載入）
+> **`skel`'s vendored runtime**: npm's `@esotericsoftware/spine-core` is 4.x only and can't read a 3.8.99 skel (the binary format changed at 4.0), so [`vendor/spine-core-3.8.mjs`](vendor/spine-core-3.8.mjs) bundles the exact 3.8 runtime Cocos ships (pure JS, used only to read animation names/durations — no GPU; a `FakeTexture` stands in). `skel` is **node-only** (it reads the binary itself, needs `ctx.projectDir`) and requires the `.atlas` sibling next to the `.skel` (attachment parsing needs it; without it that animation's duration won't resolve). If the project's spine version changes, update this file from a matching Cocos install.
 
-coir 會自動載入 **coir 根**（全域、跨專案）與 **被掃描專案根**（只該專案）的 `coir.plugins.mjs`，其 `default` 匯出一個 plugin 或一個陣列。把這裡要的外掛 re-export 出去即可：
+## Loading
+
+### 1. `--plugin <file>` (this query only, repeatable)
+
+```bash
+coir -C <your-project> --plugin ./audio-call.mjs --plugin ./i18n-label.mjs uses audio/bgm_title.mp3 --where
+```
+
+### 2. A `coir.plugins.mjs` (auto-loaded)
+
+coir auto-loads a `coir.plugins.mjs` from the **coir repo root** (global, cross-project) and from the **scanned project root** (that project only); its `default` export is a plugin or an array. Re-export the ones you want:
 
 ```js
-// <你的專案>/coir.plugins.mjs
+// <your-project>/coir.plugins.mjs
 import audioCall from './path/to/coir-plugins/audio-call.mjs';
 import i18nLabel from './path/to/coir-plugins/i18n-label.mjs';
 export default [audioCall, i18nLabel];
 ```
 
-> 全域／專案的 `coir.plugins.mjs` 在 **CLI、瀏覽器、Cocos 擴充**都會自動載入；用 `--plugin` 則只在該次 CLI/MCP 查詢生效。詳見 coir 主 repo 的「外掛」一節。
+> A global/project `coir.plugins.mjs` is auto-loaded by the **CLI, the browser, and the Cocos extension**; `--plugin` applies only to that one CLI/MCP invocation. See coir's "Plugins" section for details.
 
-## 寫自己的外掛
+## Writing your own
 
-外掛契約（型別／邊／命令）與 `ctx` API 見 coir 主 repo 的 **[外掛](https://github.com/aaronhg/coir#外掛擴充型別邊與命令)** 一節與 `types/index.d.ts`。
+The plugin contract (types / edges / commands) and the `ctx` API are documented in coir's **[Plugins](https://github.com/aaronhg/coir#外掛擴充型別邊與命令)** section and in `types/index.d.ts`.
