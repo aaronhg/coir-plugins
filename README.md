@@ -11,8 +11,9 @@ Each file is **one plugin, `export default` a single plugin object** — zero de
 | [`audio-call.mjs`](audio-call.mjs) | `audio-call` | Scans component source and links a `playAudio('bgm_title')`-style call to the audio asset of the same name (`.mp3`/`.ogg`) → edge `script → audio` | `FUNCS`: your play-audio function name(s) |
 | [`i18n-label.mjs`](i18n-label.mjs) | `i18n-label` | Links an i18n label component's dot-path key (e.g. `MODULE.some_key`) in a prefab/scene to the `lang.json` that defines it → edge `prefab/scene → lang.json` | `COMPONENT`/`KEY_PROP`/`LANG_FILE`, `isLangFile()` |
 | [`resources-sprite.mjs`](resources-sprite.mjs) | `resources-sprite` | Links a component that resolves sprites by frame name (a serialized `keys: string[]`) at runtime to the sprite-atlas(es) holding those frames → edge `prefab/scene → atlas` (coir's built-in atlas plugin then links atlas → texture, completing `scene → atlas → png`) | `COMPONENTS`/`KEYS_PROP` |
+| [`resources-load.mjs`](resources-load.mjs) | `resources-load` | Recovers dynamic-load edges: scans source for `resources.load('ui/Coin')` / `loadDir('audio')` (and a bundle's `someBundle.load('x')` paired with `loadBundle('name')`), resolves the literal path to an asset → edge `script → asset` (kind `resource-load`). The loaded asset stops being a false "unused" and shows up in the topology. | `PATTERNS`/`DECLARED`/`FOLLOW_BUNDLE_LOAD` |
 
-> All three edge plugins see **component scripts only** (plain util modules are pruned before edges run) and resolve **string literals only** (variables/enums can't be followed statically); a colliding name links to every match — these are deliberate trade-offs.
+> `audio-call`/`i18n-label`/`resources-sprite` see **component scripts only** (plain util modules are pruned before edges run); **`resources-load` scans every `.ts`** (incl. util loaders) and hangs their edges off a virtual `dynamic-load` node. All resolve **string literals only** (variables/enums can't be followed statically) — `resources-load` lets you declare the un-resolvable ones; a colliding name links to every match. These are deliberate trade-offs.
 
 ## Command plugins
 
