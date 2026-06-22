@@ -15,9 +15,13 @@ Each file is **one plugin, `export default` a single plugin object** — zero de
 
 > `audio-call`/`i18n-label`/`resources-sprite` see **component scripts only** (plain util modules are pruned before edges run); **`resources-load` scans every `.ts`** (incl. util loaders) and hangs their edges off a virtual `dynamic-load` node. All resolve **string literals only** (variables/enums can't be followed statically) — `resources-load` lets you declare the un-resolvable ones; a colliding name links to every match. These are deliberate trade-offs.
 
+> **All four edge plugins are PORTABLE** — pure-graph `edges()` over `ctx`, zero imports, no node APIs — so they run in **both** the browser and node. See **Loading** for where each kind goes.
+
 ## Command plugins
 
 Each adds a `coir <cmd> <asset>` command (headless, engine-free); because it declares an `inputSchema`, it's **also an MCP tool under `coir mcp`** (one `run` serves both). Nothing to configure.
+
+> Both are **NODE-only** — `commands` (CLI/MCP) + `assetMenus` (editor), and `skel` reads a binary via `node:fs` + a vendored runtime. They take **no effect in the browser**, so they belong in `coir.plugins.node.mjs`, never a self-contained `coir.plugins.mjs`.
 
 | File | name | What it does |
 |---|---|---|
@@ -42,18 +46,35 @@ coir skel hero.skel  -C /path/to/game --plugin /path/to/coir-plugins/skel.mjs
 coir -C <your-project> --plugin ./audio-call.mjs --plugin ./i18n-label.mjs uses audio/bgm_title.mp3 --where
 ```
 
-### 2. A `coir.plugins.mjs` (auto-loaded)
+### 2. Two auto-loaded config files (by host capability)
 
-coir auto-loads a `coir.plugins.mjs` from the **coir repo root** (global, cross-project) and from the **scanned project root** (that project only); its `default` export is a plugin or an array. Re-export the ones you want:
+coir auto-loads config from the **coir repo root** (global, cross-project) and the **scanned project root** (that project only) — **two files, split by what each host can run**:
+
+| File | Loaded by | May contain |
+|---|---|---|
+| `coir.plugins.mjs` | **every** host (browser + node) | PORTABLE only: must be **self-contained** — no relative `import`s, no node APIs. Pure-graph `edges`/`colors`/`messages`/`reports`/… |
+| `coir.plugins.node.mjs` | **node** hosts only (CLI / MCP / editor) | anything: free to `import` siblings, use `fs`, add `commands`/`assetMenus`. The browser **skips** it. |
+
+This repo ships a ready example of each — [`coir.plugins.node.mjs`](coir.plugins.node.mjs) (imports & re-exports all six — the usual headless config) and [`coir.plugins.mjs`](coir.plugins.mjs) (a self-contained portable template).
+
+**Node (CLI / MCP / Cocos editor)** — `import` the ones you want; this is also the only place command plugins (`anim`/`skel`) work:
 
 ```js
-// <your-project>/coir.plugins.mjs
+// <your-project>/coir.plugins.node.mjs
 import audioCall from './path/to/coir-plugins/audio-call.mjs';
-import i18nLabel from './path/to/coir-plugins/i18n-label.mjs';
-export default [audioCall, i18nLabel];
+import skel from './path/to/coir-plugins/skel.mjs';
+export default [audioCall, skel];
 ```
 
-> A global/project `coir.plugins.mjs` is auto-loaded by the **CLI, the browser, and the Cocos extension**; `--plugin` applies only to that one CLI/MCP invocation. See coir's "Plugins" section for details.
+**Browser** — a `coir.plugins.mjs` must be **self-contained** (the browser can't resolve relative imports). The edge plugins here are zero-import, so **paste a plugin's `export default {…}` body inline** rather than `import` it:
+
+```js
+// <your-project>/coir.plugins.mjs  (browser + node)
+const audioCall = { name: 'audio-call', async edges(ctx) { /* …paste body from audio-call.mjs… */ } };
+export default [audioCall];
+```
+
+> If a `coir.plugins.mjs` accidentally `import`s something, the browser skips it with a console warning pointing at `coir.plugins.node.mjs`; if it carries `commands`/`assetMenus`/`rules`, the browser warns those take no effect there. `--plugin` applies only to that one CLI/MCP invocation. See coir's "Plugins" section for details.
 
 ## Writing your own
 
